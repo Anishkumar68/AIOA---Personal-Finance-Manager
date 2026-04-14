@@ -36,7 +36,7 @@ class LoanCreate(BaseModel):
     contact_id: int
     direction: LoanDirection
     title: Optional[str] = Field(None, max_length=120)
-    currency: str = Field(default="USD", min_length=1, max_length=10)
+    currency: str = Field(default="INR", min_length=1, max_length=10)
     interest_rate: Optional[Decimal] = Field(None, ge=0)
     start_date: date
     due_date: Optional[date] = None
@@ -79,4 +79,3 @@ class LoanResponse(BaseModel):
     outstanding: Decimal
     last_activity_at: Optional[datetime] = None
     entries: Optional[List[LoanEntryResponse]] = None
-

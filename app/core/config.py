@@ -23,10 +23,20 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SECRET_KEY: str
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    # 3. SUPABASE CONFIGURATION (Optional)
+    SUPABASE_URL: str | None = None
+    SUPABASE_KEY: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+    
+    # Extra DB config fields (optional)
+    db_pass: str | None = None
+    host: str | None = None
+    port: int | None = None
+    database: str | None = None
+    user: str | None = None
+
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 @lru_cache()

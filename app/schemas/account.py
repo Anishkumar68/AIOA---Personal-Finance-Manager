@@ -9,7 +9,7 @@ from decimal import Decimal
 class AccountCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     type: str = Field(..., min_length=1, max_length=50)
-    currency: str = Field(default="USD", max_length=10)
+    currency: str = Field(default="INR", max_length=10)
     opening_balance: Decimal = Field(default=0, ge=0)
 
 
