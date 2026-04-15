@@ -37,3 +37,8 @@ class Account(Base):
     transfer_transactions = relationship(
         "Transaction", foreign_keys="Transaction.transfer_account_id"
     )
+    recurring_transactions = relationship(
+        "RecurringTransaction",
+        back_populates="account",
+        foreign_keys="RecurringTransaction.account_id",
+    )

@@ -10,18 +10,19 @@ from fastapi import HTTPException, status
 from app.models.transaction import Transaction
 from app.models.account import Account
 from app.models.category import Category
+from app.models.tag import Tag, transaction_tags
 from app.schemas.transaction import TransactionCreate, TransactionUpdate, TransactionFilters
 from app.services.account_service import recalculate_balance
 
 
 def get_transactions(
-    db: Session, 
-    user_id: int, 
+    db: Session,
+    user_id: int,
     filters: TransactionFilters
 ) -> Tuple[List[Transaction], int]:
     """Get transactions with filters and pagination."""
     query = db.query(Transaction).filter(Transaction.user_id == user_id)
-    
+
     # Apply filters
     if filters.from_date:
         query = query.filter(Transaction.date >= filters.from_date)
@@ -35,20 +36,22 @@ def get_transactions(
         query = query.filter(Transaction.type == filters.type)
     if filters.search:
         query = query.filter(Transaction.note.ilike(f"%{filters.search}%"))
-    
+    if filters.tag_id:
+        query = query.join(Transaction.tags).filter(Tag.id == filters.tag_id)
+
     # Get total count
     total = query.count()
-    
+
     # Order by date desc (newest first) before applying pagination
     query = query.order_by(Transaction.date.desc(), Transaction.created_at.desc())
-    
+
     # Apply pagination
     offset = (filters.page - 1) * filters.limit
     query = query.offset(offset).limit(filters.limit)
-    
+
     # Execute query
     transactions = query.all()
-    
+
     return transactions, total
 
 
@@ -68,7 +71,9 @@ def get_transaction(db: Session, transaction_id: int, user_id: int) -> Transacti
     return transaction
 
 
-def create_transaction(db: Session, user_id: int, transaction_data: TransactionCreate) -> Transaction:
+def create_transaction(
+    db: Session, user_id: int, transaction_data: TransactionCreate, *, commit: bool = True
+) -> Transaction:
     """Create a new transaction."""
     # Validate account exists and belongs to user
     account = db.query(Account).filter(
@@ -159,7 +164,20 @@ def create_transaction(db: Session, user_id: int, transaction_data: TransactionC
     )
     
     db.add(transaction)
-    
+
+    # Assign tags if provided
+    if transaction_data.tag_ids:
+        tags = db.query(Tag).filter(
+            Tag.id.in_(transaction_data.tag_ids),
+            Tag.user_id == user_id
+        ).all()
+        if len(tags) != len(transaction_data.tag_ids):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more tag IDs not found"
+            )
+        transaction.tags = tags
+
     # Update account balances
     if transaction_data.type == "income":
         account.current_balance += transaction_data.amount
@@ -174,8 +192,11 @@ def create_transaction(db: Session, user_id: int, transaction_data: TransactionC
         ).first()
         transfer_account.current_balance += transaction_data.amount
     
-    db.commit()
-    db.refresh(transaction)
+    if commit:
+        db.commit()
+        db.refresh(transaction)
+    else:
+        db.flush()
     
     return transaction
 
@@ -191,7 +212,10 @@ def update_transaction(db: Session, transaction_id: int, user_id: int, transacti
     original_transfer_account_id = transaction.transfer_account_id
     
     update_data = transaction_data.model_dump(exclude_unset=True)
-    
+
+    # Handle tag_ids separately (not a model column)
+    tag_ids = update_data.pop("tag_ids", None)
+
     # Validate updates
     if "category_id" in update_data and update_data["category_id"]:
         category = db.query(Category).filter(
@@ -267,7 +291,24 @@ def update_transaction(db: Session, transaction_id: int, user_id: int, transacti
         db.query(Account).filter(Account.id == current_transfer_account_id).update(
             {Account.current_balance: Account.current_balance + current_amount}
         )
-    
+
+    # Update tags if provided
+    if tag_ids is not None:
+        if tag_ids:
+            tags = db.query(Tag).filter(
+                Tag.id.in_(tag_ids),
+                Tag.user_id == user_id
+            ).all()
+            if len(tags) != len(tag_ids):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="One or more tag IDs not found"
+                )
+            transaction.tags = tags
+        else:
+            # Clear all tags
+            transaction.tags = []
+
     db.commit()
     db.refresh(transaction)
     

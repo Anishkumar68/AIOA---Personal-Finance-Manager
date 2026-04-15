@@ -21,3 +21,8 @@ class Category(Base):
     user = relationship("User", backref="categories")
     transactions = relationship("Transaction", back_populates="category", foreign_keys="Transaction.category_id")
     budgets = relationship("Budget", back_populates="category", foreign_keys="Budget.category_id")
+    recurring_transactions = relationship(
+        "RecurringTransaction",
+        back_populates="category",
+        foreign_keys="RecurringTransaction.category_id",
+    )

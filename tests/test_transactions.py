@@ -87,6 +87,82 @@ class TestTransactions:
         assert "total" in data
         assert "page" in data
         assert "limit" in data
+
+    def test_export_transactions_csv(self, authenticated_client, test_account, test_category):
+        """Test exporting transactions as CSV."""
+        if not test_category:
+            pytest.skip("No expense category available")
+
+        # Ensure there is at least one transaction
+        transaction_data = {
+            "type": "expense",
+            "amount": "12.34",
+            "account_id": test_account["id"],
+            "category_id": test_category["id"],
+            "date": str(date.today()),
+            "note": "Export test"
+        }
+        create_response = authenticated_client.post("/api/v1/transactions/", json=transaction_data)
+        assert create_response.status_code == status.HTTP_201_CREATED
+
+        response = authenticated_client.get("/api/v1/transactions/export")
+        assert response.status_code == status.HTTP_200_OK
+        assert "text/csv" in response.headers.get("content-type", "")
+        body = response.text
+        assert "Date" in body
+        assert "Amount" in body
+
+    def test_import_transactions_csv_partial(self, authenticated_client, test_account, test_category):
+        """Test importing transactions from CSV."""
+        if not test_category:
+            pytest.skip("No expense category available")
+
+        csv_body = (
+            "Date,Type,Amount,Account ID,Category ID,Note,Reference\n"
+            f"{date.today().isoformat()},expense,10.00,{test_account['id']},{test_category['id']},Imported row,REF-1\n"
+        )
+
+        response = authenticated_client.post(
+            "/api/v1/transactions/import?mode=partial",
+            files={"file": ("transactions.csv", csv_body, "text/csv")}
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["imported"] == 1
+        assert data["failed"] == 0
+        assert data["total_rows"] == 1
+
+        # Verify account balance changed
+        acc_res = authenticated_client.get("/api/v1/accounts/")
+        assert acc_res.status_code == status.HTTP_200_OK
+        accounts = acc_res.json()
+        acc = next(a for a in accounts if a["id"] == test_account["id"])
+        assert Decimal(acc["current_balance"]) == Decimal("4990.00")
+
+    def test_import_transactions_csv_dry_run(self, authenticated_client, test_account, test_category):
+        """Dry-run import should not create records."""
+        if not test_category:
+            pytest.skip("No expense category available")
+
+        csv_body = (
+            "Date,Type,Amount,Account ID,Category ID,Note\n"
+            f"{date.today().isoformat()},expense,5.00,{test_account['id']},{test_category['id']},Dry run row\n"
+        )
+
+        response = authenticated_client.post(
+            "/api/v1/transactions/import?mode=partial&dry_run=true",
+            files={"file": ("transactions.csv", csv_body, "text/csv")}
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["dry_run"] is True
+        assert data["imported"] == 1
+        assert data["failed"] == 0
+
+        # No transaction should be created in dry-run
+        tx_res = authenticated_client.get("/api/v1/transactions/")
+        assert tx_res.status_code == status.HTTP_200_OK
+        assert tx_res.json()["total"] == 0
     
     def test_delete_transaction(self, authenticated_client, test_account, test_category):
         """Test deleting a transaction."""

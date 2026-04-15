@@ -27,3 +27,9 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions", foreign_keys=[account_id])
     category = relationship("Category", back_populates="transactions", foreign_keys=[category_id])
     transfer_account = relationship("Account", foreign_keys=[transfer_account_id], overlaps="transfer_transactions")
+    tags = relationship(
+        "Tag",
+        secondary="transaction_tags",
+        back_populates="transactions",
+        overlaps="transaction_tags_rel"
+    )

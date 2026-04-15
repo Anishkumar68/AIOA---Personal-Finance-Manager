@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from app.core.config import settings
 
 # Import routers
-from app.api import auth, accounts, categories, transactions, dashboard, budgets, reports, contacts, loans
+from app.api import auth, accounts, categories, transactions, dashboard, budgets, reports, contacts, loans, recurring_transactions, tags
 
 
 @asynccontextmanager
@@ -44,6 +44,8 @@ app.include_router(budgets.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(contacts.router, prefix="/api/v1")
 app.include_router(loans.router, prefix="/api/v1")
+app.include_router(recurring_transactions.router, prefix="/api/v1")
+app.include_router(tags.router, prefix="/api/v1")
 
 
 @app.get("/")

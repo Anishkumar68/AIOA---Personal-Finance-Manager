@@ -8,5 +8,11 @@ from app.models.budget import Budget
 from app.models.contact import Contact
 from app.models.loan import Loan
 from app.models.loan_entry import LoanEntry
+from app.models.recurring_transaction import RecurringTransaction
+from app.models.tag import Tag, transaction_tags
 
-__all__ = ["User", "Account", "Category", "Transaction", "Budget", "Contact", "Loan", "LoanEntry"]
+__all__ = [
+    "User", "Account", "Category", "Transaction", "Budget",
+    "Contact", "Loan", "LoanEntry", "RecurringTransaction",
+    "Tag", "transaction_tags"
+]
