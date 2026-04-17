@@ -139,6 +139,29 @@ class TestTransactions:
         acc = next(a for a in accounts if a["id"] == test_account["id"])
         assert Decimal(acc["current_balance"]) == Decimal("4990.00")
 
+    def test_import_transactions_csv_bank_statement_default_account(self, authenticated_client, test_account):
+        """Bank-export-like CSV should import with default_account_id + Debit/Credit columns."""
+        csv_body = (
+            "Transaction Date,Value Date,Description/Narration,Cheque/ Reference No.,Debit (INR),Credit (INR),Balance (INR)\n"
+            f"{date.today().isoformat()},{date.today().isoformat()},Imported bank row,REF-1,10.00,,4990.00\n"
+        )
+
+        response = authenticated_client.post(
+            f"/api/v1/transactions/import?mode=partial&default_account_id={test_account['id']}",
+            files={"file": ("bank.csv", csv_body, "text/csv")},
+        )
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["imported"] == 1
+        assert data["failed"] == 0
+        assert data["total_rows"] == 1
+
+        acc_res = authenticated_client.get("/api/v1/accounts/")
+        assert acc_res.status_code == status.HTTP_200_OK
+        accounts = acc_res.json()
+        acc = next(a for a in accounts if a["id"] == test_account["id"])
+        assert Decimal(acc["current_balance"]) == Decimal("4990.00")
+
     def test_import_transactions_csv_dry_run(self, authenticated_client, test_account, test_category):
         """Dry-run import should not create records."""
         if not test_category:

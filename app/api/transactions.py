@@ -3,6 +3,7 @@
 from typing import Optional, Dict, List
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+import re
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from fastapi.responses import StreamingResponse
@@ -24,6 +25,7 @@ from app.schemas.transaction import (
     TransactionImportRowError,
 )
 from app.services import transaction_service
+from app.services.statement_pdf import StatementParseError, extract_credit_card_rows_from_pdf_bytes
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -172,28 +174,17 @@ def import_template():
     writer = csv.writer(output)
     writer.writerow(
         [
-            "Date",
-            "Type",
-            "Amount",
-            "Account",
-            "Category",
-            "Note",
-            "Reference",
-            "Transfer Account",
+            "Transaction Date",
+            "Value Date",
+            "Description/Narration",
+            "Cheque/ Reference No.",
+            "Debit (INR)",
+            "Credit (INR)",
+            "Balance (INR)",
         ]
     )
-    writer.writerow(
-        [
-            "2026-01-15",
-            "expense",
-            "250.00",
-            "Main Account",
-            "Food",
-            "Grocery shopping",
-            "INV-123",
-            "",
-        ]
-    )
+    writer.writerow(["2026-01-15", "2026-01-15", "Grocery shopping", "INV-123", "250.00", "", "4750.00"])
+    writer.writerow(["2026-01-20", "2026-01-20", "Salary credit", "NEFT-456", "", "2000.00", "6750.00"])
     output.seek(0)
     return StreamingResponse(
         iter([output.getvalue()]),
@@ -235,7 +226,22 @@ def delete_transaction(
 
 
 def _norm_header(value: str) -> str:
-    return value.strip().lower().replace(" ", "_")
+    raw = (value or "").strip().lower()
+    raw = raw.replace("\ufeff", "")
+    raw = re.sub(r"[^a-z0-9]+", "_", raw)
+    return raw.strip("_")
+
+
+def _get_first(normalized: Dict[str, Optional[str]], *keys: str) -> str:
+    for k in keys:
+        v = normalized.get(k)
+        if v is None:
+            continue
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        if not isinstance(v, str) and v:
+            return str(v).strip()
+    return ""
 
 
 def _parse_date(value: str) -> date:
@@ -286,25 +292,108 @@ async def import_transactions(
     file: UploadFile = File(...),
     mode: str = Query("partial", description="partial | all_or_nothing"),
     dry_run: bool = Query(False),
+    default_account_id: Optional[int] = Query(None, description="Used when CSV omits Account/Account ID columns"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
     """Import transactions from a CSV file."""
+    return await _import_transactions_any(
+        file=file,
+        mode=mode,
+        dry_run=dry_run,
+        default_account_id=default_account_id,
+        current_user=current_user,
+        db=db,
+        kind="csv",
+    )
+
+
+@router.post("/import-pdf", response_model=TransactionImportResponse)
+async def import_transactions_pdf(
+    file: UploadFile = File(...),
+    mode: str = Query("partial", description="partial | all_or_nothing"),
+    dry_run: bool = Query(False),
+    default_account_id: Optional[int] = Query(None, description="Account to apply to all parsed rows"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Import transactions from a credit-card statement PDF (text-based PDFs supported)."""
+    if default_account_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="default_account_id is required for PDF import")
+    return await _import_transactions_any(
+        file=file,
+        mode=mode,
+        dry_run=dry_run,
+        default_account_id=default_account_id,
+        current_user=current_user,
+        db=db,
+        kind="pdf",
+    )
+
+
+async def _import_transactions_any(
+    *,
+    file: UploadFile,
+    mode: str,
+    dry_run: bool,
+    default_account_id: Optional[int],
+    current_user: User,
+    db: Session,
+    kind: str,
+) -> TransactionImportResponse:
     if mode not in {"partial", "all_or_nothing"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid mode")
 
-    if not file.filename or not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload a .csv file")
-
     content = await file.read()
-    try:
-        text = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV must be UTF-8 encoded")
+    if kind == "csv":
+        if not file.filename or not file.filename.lower().endswith(".csv"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload a .csv file")
 
-    reader = csv.DictReader(io.StringIO(text))
-    if not reader.fieldnames:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV header row is missing")
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV must be UTF-8 encoded")
+
+        reader = csv.DictReader(io.StringIO(text))
+        if not reader.fieldnames:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV header row is missing")
+    elif kind == "pdf":
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload a .pdf file")
+        try:
+            rows = extract_credit_card_rows_from_pdf_bytes(content)
+        except StatementParseError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(
+            [
+                "Transaction Date",
+                "Value Date",
+                "Description/Narration",
+                "Cheque/ Reference No.",
+                "Debit (INR)",
+                "Credit (INR)",
+                "Balance (INR)",
+            ]
+        )
+        for r in rows:
+            writer.writerow(
+                [
+                    r.transaction_date.isoformat(),
+                    (r.value_date.isoformat() if r.value_date else ""),
+                    r.description,
+                    r.reference or "",
+                    (str(r.debit) if r.debit is not None else ""),
+                    (str(r.credit) if r.credit is not None else ""),
+                    (str(r.balance) if r.balance is not None else ""),
+                ]
+            )
+        output.seek(0)
+        reader = csv.DictReader(io.StringIO(output.getvalue()))
+    else:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid import kind")
 
     accounts = db.query(Account).filter(Account.user_id == current_user.id).all()
     categories = db.query(Category).filter(Category.user_id == current_user.id).all()
@@ -316,6 +405,15 @@ async def import_transactions(
     categories_by_name: Dict[str, List[Category]] = {}
     for cat in categories:
         categories_by_name.setdefault(cat.name.strip().lower(), []).append(cat)
+
+    if default_account_id is not None:
+        default_acc = (
+            db.query(Account)
+            .filter(Account.id == default_account_id, Account.user_id == current_user.id)
+            .first()
+        )
+        if not default_acc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="default_account_id is invalid")
 
     def resolve_account_id(account_value: str) -> int:
         if not account_value:
@@ -355,10 +453,22 @@ async def import_transactions(
         normalized = {_norm_header(k): (v.strip() if isinstance(v, str) else v) for k, v in (row or {}).items() if k}
 
         try:
-            raw_type = normalized.get("type", "")
-            raw_amount = normalized.get("amount", "")
-            raw_debit = normalized.get("debit", "")
-            raw_credit = normalized.get("credit", "")
+            raw_type = _get_first(normalized, "type", "dr_cr", "drcr", "transaction_type")
+            raw_amount = _get_first(normalized, "amount")
+            raw_debit = _get_first(
+                normalized,
+                "debit_inr",
+                "debit",
+                "withdrawal_amount",
+                "withdrawal",
+            )
+            raw_credit = _get_first(
+                normalized,
+                "credit_inr",
+                "credit",
+                "deposit_amount",
+                "deposit",
+            )
 
             txn_type = _parse_type(raw_type) if raw_type else ""
             if not raw_amount and (raw_debit or raw_credit):
@@ -373,15 +483,20 @@ async def import_transactions(
             if not txn_type:
                 raise ValueError("Missing type")
 
-            txn_date = _parse_date(normalized.get("date", ""))
+            txn_date_raw = _get_first(normalized, "transaction_date", "date", "value_date")
+            txn_date = _parse_date(txn_date_raw)
             amount = _parse_amount(raw_amount)
 
             raw_account_id = normalized.get("account_id") or normalized.get("accountid")
-            raw_account = normalized.get("account", "")
+            raw_account = _get_first(normalized, "account")
             if raw_account_id:
                 account_id_val = int(str(raw_account_id).strip())
-            else:
+            elif raw_account:
                 account_id_val = resolve_account_id(raw_account)
+            elif default_account_id is not None:
+                account_id_val = default_account_id
+            else:
+                raise ValueError("Missing account")
 
             raw_transfer_account_id = normalized.get("transfer_account_id") or normalized.get("transfer_accountid")
             raw_transfer_account = normalized.get("transfer_account", "") or normalized.get("transferaccount", "")
@@ -399,11 +514,16 @@ async def import_transactions(
             if txn_type in {"income", "expense"}:
                 if raw_category_id:
                     category_id_val = int(str(raw_category_id).strip())
-                else:
+                elif raw_category:
                     category_id_val = resolve_category_id(raw_category, txn_type)
 
-            note = normalized.get("note") or None
-            reference = normalized.get("reference") or None
+            description = _get_first(normalized, "description_narration", "description", "narration", "particulars")
+            note = _get_first(normalized, "note") or description or None
+            value_date = _get_first(normalized, "value_date")
+            if note and value_date and value_date not in note:
+                note = f"{note} (Value Date: {value_date})"
+
+            reference = _get_first(normalized, "cheque_reference_no", "reference") or None
 
             txn = TransactionCreate(
                 type=txn_type,
