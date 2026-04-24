@@ -1,6 +1,6 @@
 """Reports service."""
 
-from typing import List
+from typing import List, Literal
 from datetime import date, timedelta
 from decimal import Decimal
 from sqlalchemy.orm import Session
@@ -132,4 +132,86 @@ def get_account_balances_report(db: Session, user_id: int) -> dict:
     
     return {
         "accounts": account_data
+    }
+
+
+def get_cashflow_series(
+    db: Session,
+    user_id: int,
+    from_date: date,
+    to_date: date,
+    bucket: Literal["day", "month"] = "day",
+) -> dict:
+    """Return an income/expense/net time series for charts."""
+    if to_date < from_date:
+        return {"from_date": from_date, "to_date": to_date, "bucket": bucket, "series": []}
+
+    txns = (
+        db.query(Transaction.date, Transaction.type, Transaction.amount)
+        .filter(
+            Transaction.user_id == user_id,
+            Transaction.date >= from_date,
+            Transaction.date <= to_date,
+            Transaction.type.in_(["income", "expense"]),
+        )
+        .all()
+    )
+
+    series_map: dict[date, dict[str, Decimal]] = {}
+
+    def bucket_key(d: date) -> date:
+        if bucket == "month":
+            return d.replace(day=1)
+        return d
+
+    for d, t, amt in txns:
+        key = bucket_key(d)
+        row = series_map.get(key)
+        if not row:
+            row = {"income": Decimal("0"), "expense": Decimal("0")}
+            series_map[key] = row
+        if t == "income":
+            row["income"] += Decimal(amt)
+        elif t == "expense":
+            row["expense"] += Decimal(amt)
+
+    def iter_periods() -> List[date]:
+        if bucket == "month":
+            cur = from_date.replace(day=1)
+            end = to_date.replace(day=1)
+            out: List[date] = []
+            while cur <= end:
+                out.append(cur)
+                if cur.month == 12:
+                    cur = cur.replace(year=cur.year + 1, month=1, day=1)
+                else:
+                    cur = cur.replace(month=cur.month + 1, day=1)
+            return out
+
+        # day bucket
+        out: List[date] = []
+        cur = from_date
+        while cur <= to_date:
+            out.append(cur)
+            cur = cur + timedelta(days=1)
+        return out
+
+    series = []
+    for key in iter_periods():
+        row = series_map.get(key) or {"income": Decimal("0"), "expense": Decimal("0")}
+        income = row["income"]
+        expense = row["expense"]
+        series.append({"period": key, "income": income, "expense": expense, "net": income - expense})
+
+    total_income = sum((s["income"] for s in series), Decimal("0"))
+    total_expense = sum((s["expense"] for s in series), Decimal("0"))
+
+    return {
+        "from_date": from_date,
+        "to_date": to_date,
+        "bucket": bucket,
+        "total_income": total_income,
+        "total_expense": total_expense,
+        "net": total_income - total_expense,
+        "series": series,
     }

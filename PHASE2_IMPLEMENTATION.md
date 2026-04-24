@@ -200,6 +200,23 @@ curl -X POST "http://localhost:8000/api/v1/transactions/import?mode=partial" \
 
 ---
 
+### Nice-to-Have: Charts & Visual Analytics
+
+**Backend:**
+- **Endpoint:** `GET /api/v1/reports/cashflow-series`
+- **Params:** `from_date`, `to_date`, `bucket=day|month`
+- **Response:** time series of `income`, `expense`, and `net` for charting.
+
+**Frontend:**
+- **Charts Components:** `src/components/charts.tsx` (SVG charts, no extra dependencies)
+- **Reports Page:** `src/pages/ReportsPage.tsx`
+  - Daily cashflow line chart (selected month)
+  - 6-month net savings trend chart
+  - Category expense donut chart
+  - Account balance bar list
+
+---
+
 ## How Recurring Transactions Work
 
 ### Creation Flow:

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     LOG_LEVEL: str = "INFO"
+    CORS_ORIGINS: str | None = None  # comma-separated list, e.g. "http://localhost:5173,https://your-ui.com"
 
     # 2. REQUIRED FROM .ENV (No defaults provided!)
     # If these are missing from your .env file, the app will crash on startup

@@ -26,10 +26,16 @@ app = FastAPI(
 )
 
 # CORS middleware
+def _cors_origins():
+    if settings.CORS_ORIGINS:
+        return [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+    # Safe defaults for local UI dev hitting deployed API (bearer-token auth, no cookies)
+    return ["http://localhost:5173", "http://127.0.0.1:5173"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
+    allow_origins=_cors_origins(),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
