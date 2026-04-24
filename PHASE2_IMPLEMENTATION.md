@@ -9,7 +9,7 @@
 - **Location:** `app/api/transactions.py`
 - **Features:**
   - Exports all transactions as CSV file download
-  - Respects all filters (date range, account, category, type, search)
+- Respects all filters (date range, account, category, type, search)
   - Includes: IDs + names for account/category/transfer account (import-friendly)
   - No pagination limit (exports all matching records)
 
@@ -163,6 +163,40 @@ curl -X POST "http://localhost:8000/api/v1/transactions/import?mode=partial" \
   - `addGoalContribution(goalId, body)`
   - `getGoalContributions(goalId)`
   - `deleteGoalContribution(goalId, contributionId)`
+
+---
+
+### Required (Critical): Password Reset / Forgot Password
+
+**Backend:**
+- **Endpoints:**
+  - `POST /api/v1/auth/forgot-password`
+  - `POST /api/v1/auth/reset-password`
+- **Model:** `app/models/password_reset.py` (`password_reset_tokens`)
+- **Migration:** `alembic/versions/006_password_reset_tokens.py`
+- **Notes:**
+  - Forgot-password always returns a generic success message (prevents user enumeration)
+  - In `DEBUG=true`, the API also returns `reset_token` for local testing
+
+**Frontend:**
+- **Pages:**
+  - `src/pages/ForgotPasswordPage.tsx` (`/forgot-password`)
+  - `src/pages/ResetPasswordPage.tsx` (`/reset-password`)
+- Login page now links to “Forgot password?”
+
+---
+
+### Nice-to-Have (Important): Advanced Transaction Filters + Duplication
+
+**Backend:**
+- `GET /api/v1/transactions/` now supports:
+  - `min_amount`, `max_amount`
+- `GET /api/v1/transactions/export` now supports:
+  - `tag_id`, `min_amount`, `max_amount`
+
+**Frontend:**
+- Transactions filters UI includes Min/Max Amount (shareable via URL params).
+- Edit Transaction page includes a “Duplicate” button (creates a copy with today’s date, then opens the new transaction for editing).
 
 ---
 

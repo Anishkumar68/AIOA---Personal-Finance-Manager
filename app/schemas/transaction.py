@@ -57,6 +57,8 @@ class TransactionFilters(BaseModel):
     type: Optional[str] = None
     search: Optional[str] = None
     tag_id: Optional[int] = None
+    min_amount: Optional[Decimal] = Field(None, gt=0)
+    max_amount: Optional[Decimal] = Field(None, gt=0)
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=100)
 

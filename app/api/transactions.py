@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.transaction import Transaction
 from app.models.account import Account
 from app.models.category import Category
+from app.models.tag import Tag
 from app.schemas.transaction import (
     TransactionCreate,
     TransactionUpdate,
@@ -38,6 +39,8 @@ def get_transactions(
     category_id: Optional[int] = Query(None),
     type: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    min_amount: Optional[Decimal] = Query(None, gt=0),
+    max_amount: Optional[Decimal] = Query(None, gt=0),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_active_user),
@@ -51,6 +54,8 @@ def get_transactions(
         category_id=category_id,
         type=type,
         search=search,
+        min_amount=min_amount,
+        max_amount=max_amount,
         page=page,
         limit=limit
     )
@@ -84,6 +89,9 @@ def export_transactions(
     category_id: Optional[int] = Query(None),
     type: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
+    tag_id: Optional[int] = Query(None),
+    min_amount: Optional[Decimal] = Query(None, gt=0),
+    max_amount: Optional[Decimal] = Query(None, gt=0),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -110,6 +118,12 @@ def export_transactions(
         query = query.filter(Transaction.type == type)
     if search:
         query = query.filter(Transaction.note.ilike(f"%{search}%"))
+    if tag_id:
+        query = query.join(Transaction.tags).filter(Tag.id == tag_id)
+    if min_amount is not None:
+        query = query.filter(Transaction.amount >= min_amount)
+    if max_amount is not None:
+        query = query.filter(Transaction.amount <= max_amount)
 
     query = query.order_by(Transaction.date.desc(), Transaction.created_at.desc())
 

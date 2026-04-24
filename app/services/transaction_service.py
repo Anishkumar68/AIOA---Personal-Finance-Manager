@@ -38,6 +38,10 @@ def get_transactions(
         query = query.filter(Transaction.note.ilike(f"%{filters.search}%"))
     if filters.tag_id:
         query = query.join(Transaction.tags).filter(Tag.id == filters.tag_id)
+    if filters.min_amount is not None:
+        query = query.filter(Transaction.amount >= filters.min_amount)
+    if filters.max_amount is not None:
+        query = query.filter(Transaction.amount <= filters.max_amount)
 
     # Get total count
     total = query.count()

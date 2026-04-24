@@ -88,6 +88,33 @@ class TestTransactions:
         assert "page" in data
         assert "limit" in data
 
+    def test_transactions_amount_range_filter(self, authenticated_client, test_account, test_category):
+        """Filter by min_amount/max_amount."""
+        if not test_category:
+            pytest.skip("No expense category available")
+
+        # Create two expenses with different amounts
+        for amt in ("10.00", "99.00"):
+            resp = authenticated_client.post(
+                "/api/v1/transactions/",
+                json={
+                    "type": "expense",
+                    "amount": amt,
+                    "account_id": test_account["id"],
+                    "category_id": test_category["id"],
+                    "date": str(date.today()),
+                    "note": f"Amount {amt}",
+                },
+            )
+            assert resp.status_code == status.HTTP_201_CREATED
+
+        # Only the 99.00 should match min_amount=50
+        res = authenticated_client.get("/api/v1/transactions/?min_amount=50")
+        assert res.status_code == status.HTTP_200_OK
+        data = res.json()
+        assert data["total"] == 1
+        assert data["items"][0]["amount"] == "99.00"
+
     def test_export_transactions_csv(self, authenticated_client, test_account, test_category):
         """Test exporting transactions as CSV."""
         if not test_category:
