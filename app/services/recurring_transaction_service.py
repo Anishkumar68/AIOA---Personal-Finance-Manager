@@ -1,8 +1,9 @@
 """Recurring Transaction service."""
 
 from typing import List, Tuple
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from fastapi import HTTPException, status
@@ -13,6 +14,7 @@ from app.models.account import Account
 from app.models.category import Category
 from app.schemas.recurring_transaction import RecurringTransactionCreate, RecurringTransactionUpdate
 
+logger = logging.getLogger(__name__)
 
 def get_recurring_transactions(
     db: Session,
@@ -234,10 +236,13 @@ def calculate_next_occurrence(
     frequency: str,
     interval: int,
     start_date: date,
-    last_processed: date | None = None
+    last_processed: date | datetime | None = None
 ) -> date:
     """Calculate the next occurrence date based on frequency and interval."""
-    base_date = last_processed or start_date
+    if isinstance(last_processed, datetime):
+        base_date = last_processed.date()
+    else:
+        base_date = last_processed or start_date
     
     if frequency == "daily":
         return base_date + timedelta(days=interval)
@@ -317,7 +322,7 @@ def process_due_recurring_transactions(db: Session, user_id: int, current_date: 
                 )
 
             # Update recurring transaction
-            recurring.last_processed = current_date
+            recurring.last_processed = datetime.now(timezone.utc)
             recurring.next_occurrence = calculate_next_occurrence(
                 frequency=recurring.frequency,
                 interval=recurring.interval,
@@ -333,7 +338,7 @@ def process_due_recurring_transactions(db: Session, user_id: int, current_date: 
 
         except Exception as e:
             # Log error but continue processing other recurring transactions
-            print(f"Error processing recurring transaction {recurring.id}: {str(e)}")
+            logger.exception("Error processing recurring transaction id=%s", getattr(recurring, "id", "?"))
             continue
 
     db.commit()

@@ -12,14 +12,15 @@ from app.models.recurring_transaction import RecurringTransaction
 from app.schemas.recurring_transaction import (
     RecurringTransactionCreate,
     RecurringTransactionUpdate,
-    RecurringTransactionResponse
+    RecurringTransactionResponse,
+    RecurringTransactionListResponse,
 )
 from app.services import recurring_transaction_service as service
 
 router = APIRouter(prefix="/recurring", tags=["recurring-transactions"])
 
 
-@router.get("/", response_model=dict)
+@router.get("/", response_model=RecurringTransactionListResponse)
 def get_recurring_transactions(
     include_inactive: bool = Query(False),
     current_user: User = Depends(get_current_active_user),

@@ -1,8 +1,8 @@
 """Recurring Transaction Pydantic schemas."""
 
 from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import date
+from typing import Optional, List
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -44,9 +44,14 @@ class RecurringTransactionResponse(RecurringTransactionBase):
     user_id: int
     next_occurrence: date
     is_active: bool
-    last_processed: Optional[date] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    last_processed: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class RecurringTransactionListResponse(BaseModel):
+    items: List[RecurringTransactionResponse]
+    total: int

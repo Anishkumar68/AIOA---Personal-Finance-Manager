@@ -4,7 +4,7 @@ from typing import Optional, Dict, List
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 import re
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session, joinedload
 from fastapi.responses import StreamingResponse
 import io
@@ -314,6 +314,7 @@ async def import_transactions_pdf(
     mode: str = Query("partial", description="partial | all_or_nothing"),
     dry_run: bool = Query(False),
     default_account_id: Optional[int] = Query(None, description="Account to apply to all parsed rows"),
+    pdf_password: Optional[str] = Form(None, description="Password for encrypted PDFs (not stored)"),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ):
@@ -325,6 +326,7 @@ async def import_transactions_pdf(
         mode=mode,
         dry_run=dry_run,
         default_account_id=default_account_id,
+        pdf_password=pdf_password,
         current_user=current_user,
         db=db,
         kind="pdf",
@@ -337,6 +339,7 @@ async def _import_transactions_any(
     mode: str,
     dry_run: bool,
     default_account_id: Optional[int],
+    pdf_password: Optional[str] = None,
     current_user: User,
     db: Session,
     kind: str,
@@ -361,7 +364,7 @@ async def _import_transactions_any(
         if not file.filename or not file.filename.lower().endswith(".pdf"):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Please upload a .pdf file")
         try:
-            rows = extract_credit_card_rows_from_pdf_bytes(content)
+            rows = extract_credit_card_rows_from_pdf_bytes(content, password=pdf_password)
         except StatementParseError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

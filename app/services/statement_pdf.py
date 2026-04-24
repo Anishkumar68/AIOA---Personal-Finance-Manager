@@ -280,7 +280,7 @@ def parse_credit_card_rows_from_text(full_text: str) -> list[ParsedStatementRow]
     return rows
 
 
-def extract_credit_card_rows_from_pdf_bytes(content: bytes) -> list[ParsedStatementRow]:
+def extract_credit_card_rows_from_pdf_bytes(content: bytes, password: Optional[str] = None) -> list[ParsedStatementRow]:
     try:
         from pypdf import PdfReader  # type: ignore
     except Exception as e:  # pragma: no cover
@@ -290,6 +290,17 @@ def extract_credit_card_rows_from_pdf_bytes(content: bytes) -> list[ParsedStatem
         reader = PdfReader(io.BytesIO(content))
     except Exception as e:
         raise StatementParseError("Invalid PDF file") from e
+
+    # Encrypted PDFs (common for bank statements)
+    if getattr(reader, "is_encrypted", False):
+        if not password:
+            raise StatementParseError("PDF is password-protected. Provide a password to import it.")
+        try:
+            ok = reader.decrypt(password)
+        except Exception as e:
+            raise StatementParseError("Could not decrypt PDF. Check the password and try again.") from e
+        if ok == 0:
+            raise StatementParseError("Incorrect PDF password.")
 
     all_text_parts: list[str] = []
     for page in reader.pages:
