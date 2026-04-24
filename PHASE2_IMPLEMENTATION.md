@@ -110,6 +110,62 @@ curl -X POST "http://localhost:8000/api/v1/transactions/import?mode=partial" \
 
 ---
 
+### 5. Goals / Savings Targets
+
+**Database Models:**
+- **File:** `app/models/goal.py`
+- **Tables:** `goals`, `goal_contributions`
+- **Fields (Goal):**
+  - `id`, `user_id`, `name`, `currency`, `target_amount`
+  - `start_date`, `target_date` (optional), `note` (optional)
+  - `is_active`, `created_at`, `updated_at`
+- **Fields (Contribution):**
+  - `id`, `user_id`, `goal_id`, `amount`, `date`, `note`, `created_at`
+
+**Migration:**
+- **File:** `alembic/versions/005_goals.py`
+- **Run:** `alembic upgrade head`
+
+**Backend API Endpoints:**
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/goals/` | List goals with progress |
+| `POST` | `/api/v1/goals/` | Create a goal |
+| `GET` | `/api/v1/goals/{id}` | Get goal + contributions |
+| `PUT` | `/api/v1/goals/{id}` | Update/archive goal |
+| `DELETE` | `/api/v1/goals/{id}` | Delete goal |
+| `GET` | `/api/v1/goals/{id}/contributions` | List contributions |
+| `POST` | `/api/v1/goals/{id}/contributions` | Add contribution |
+| `DELETE` | `/api/v1/goals/{id}/contributions/{cid}` | Delete contribution |
+
+**Service Layer:**
+- **File:** `app/services/goal_service.py`
+- Progress is computed as `sum(goal_contributions.amount)` per goal.
+
+**Frontend:**
+- **Page:** `src/pages/GoalsPage.tsx`
+- **Route:** `/goals`
+- **Navigation:** Added to sidebar under "Money"
+- **Features:**
+  - Create goals (name, currency, target amount, dates, note)
+  - View progress (saved/target/remaining + progress bar)
+  - Add manual contributions
+  - Archive/unarchive and delete goals
+
+**API Integration:**
+- **File:** `src/lib/api.ts`
+- **Functions:**
+  - `getGoals(includeInactive)`
+  - `createGoal(body)`
+  - `updateGoal(id, body)`
+  - `deleteGoal(id)`
+  - `addGoalContribution(goalId, body)`
+  - `getGoalContributions(goalId)`
+  - `deleteGoalContribution(goalId, contributionId)`
+
+---
+
 ## How Recurring Transactions Work
 
 ### Creation Flow:
