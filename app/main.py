@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     pass
 
 
-app = FastAPI(
+api = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="Personal Finance Manager API",
@@ -27,13 +27,14 @@ app = FastAPI(
 
 # CORS middleware
 def _cors_origins():
+    origins = {"http://localhost:5173", "http://127.0.0.1:5173"}
     if settings.CORS_ORIGINS:
-        return [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
+        origins.update(o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip())
     # Safe defaults for local UI dev hitting deployed API (bearer-token auth, no cookies)
-    return ["http://localhost:5173", "http://127.0.0.1:5173"]
+    return sorted(origins)
 
-app.add_middleware(
-    CORSMiddleware,
+app = CORSMiddleware(
+    api,
     allow_origins=_cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
@@ -41,21 +42,21 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(accounts.router, prefix="/api/v1")
-app.include_router(categories.router, prefix="/api/v1")
-app.include_router(transactions.router, prefix="/api/v1")
-app.include_router(dashboard.router, prefix="/api/v1")
-app.include_router(budgets.router, prefix="/api/v1")
-app.include_router(reports.router, prefix="/api/v1")
-app.include_router(contacts.router, prefix="/api/v1")
-app.include_router(loans.router, prefix="/api/v1")
-app.include_router(recurring_transactions.router, prefix="/api/v1")
-app.include_router(tags.router, prefix="/api/v1")
-app.include_router(goals.router, prefix="/api/v1")
+api.include_router(auth.router, prefix="/api/v1")
+api.include_router(accounts.router, prefix="/api/v1")
+api.include_router(categories.router, prefix="/api/v1")
+api.include_router(transactions.router, prefix="/api/v1")
+api.include_router(dashboard.router, prefix="/api/v1")
+api.include_router(budgets.router, prefix="/api/v1")
+api.include_router(reports.router, prefix="/api/v1")
+api.include_router(contacts.router, prefix="/api/v1")
+api.include_router(loans.router, prefix="/api/v1")
+api.include_router(recurring_transactions.router, prefix="/api/v1")
+api.include_router(tags.router, prefix="/api/v1")
+api.include_router(goals.router, prefix="/api/v1")
 
 
-@app.get("/")
+@api.get("/")
 def root():
     """Root endpoint."""
     return {
@@ -65,7 +66,7 @@ def root():
     }
 
 
-@app.get("/health")
+@api.get("/health")
 def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}
