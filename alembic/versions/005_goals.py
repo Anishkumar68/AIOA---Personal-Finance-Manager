@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("start_date", sa.Date(), nullable=False, index=True),
         sa.Column("target_date", sa.Date(), nullable=True, index=True),
         sa.Column("note", sa.String(length=500), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("1"), index=True),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true"), index=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False),
     )
@@ -48,4 +48,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("goal_contributions")
     op.drop_table("goals")
-

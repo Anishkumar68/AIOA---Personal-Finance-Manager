@@ -285,6 +285,18 @@ def _parse_amount(value: str) -> Decimal:
     return amount
 
 
+def _is_empty_amount(value: str) -> bool:
+    raw = (value or "").strip().lower()
+    if raw in {"", "-", "--", "na", "n/a", "nil", "null", "none"}:
+        return True
+    cleaned = raw.replace(",", "")
+    cleaned = cleaned.replace("₹", "").replace("$", "").replace("€", "").replace("£", "").strip()
+    try:
+        return Decimal(cleaned) == 0
+    except (InvalidOperation, ValueError):
+        return False
+
+
 def _parse_type(value: str) -> str:
     raw = (value or "").strip().lower()
     mapping = {
@@ -486,6 +498,10 @@ async def _import_transactions_any(
                 "deposit_amount",
                 "deposit",
             )
+            if _is_empty_amount(raw_debit):
+                raw_debit = ""
+            if _is_empty_amount(raw_credit):
+                raw_credit = ""
 
             txn_type = _parse_type(raw_type) if raw_type else ""
             if not raw_amount and (raw_debit or raw_credit):
